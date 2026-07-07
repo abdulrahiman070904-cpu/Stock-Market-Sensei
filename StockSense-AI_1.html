@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>StockSense AI — Terminal (Standalone)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #0B0E11;
+  --bg-panel: #12161B;
+  --line: #23272E;
+  --text: #E8E6E1;
+  --text-dim: #8B9199;
+  --gain: #3FB68C;
+  --loss: #E2604C;
+  --accent: #D8A24A;
+  --font-display: 'Space Grotesk', sans-serif;
+  --font-body: 'Inter', sans-serif;
+  --font-mono: 'IBM Plex Mono', monospace;
+}
+* { box-sizing: border-box; }
+html, body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:var(--font-body); min-height:100vh; }
+@media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+.banner {
+  background:#181310; border-bottom:1px solid #3A2E1E; color:var(--accent);
+  font-family: var(--font-mono); font-size:12.5px; text-align:center; padding:8px 14px;
+}
+
+.topbar { display:flex; align-items:center; gap:24px; padding:18px 28px; border-bottom:1px solid var(--line); flex-wrap:wrap; }
+.brand { display:flex; align-items:center; gap:8px; font-family:var(--font-display); font-weight:700; font-size:18px; letter-spacing:0.02em; white-space:nowrap; }
+.brand-mark { color:var(--accent); }
+.brand-accent { color:var(--accent); font-weight:500; }
+.search-wrap { display:flex; flex:1; min-width:240px; gap:8px; }
+#symbolInput { flex:1; background:var(--bg-panel); border:1px solid var(--line); color:var(--text); padding:10px 14px; font-family:var(--font-mono); font-size:14px; border-radius:2px; }
+#symbolInput:focus { outline:none; border-color:var(--accent); }
+#symbolInput::placeholder { color:var(--text-dim); }
+#searchBtn { background:var(--accent); color:#10131A; border:none; padding:10px 18px; font-family:var(--font-display); font-weight:600; font-size:13px; letter-spacing:0.03em; border-radius:2px; cursor:pointer; }
+#searchBtn:hover { filter:brightness(1.08); }
+#searchBtn:focus-visible, .pill:focus-visible, .quick-pick:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+.range-pills { display:flex; gap:4px; }
+.pill { background:transparent; border:1px solid var(--line); color:var(--text-dim); font-family:var(--font-mono); font-size:12px; padding:8px 12px; border-radius:2px; cursor:pointer; }
+.pill.active, .pill:hover { border-color:var(--accent); color:var(--accent); }
+
+.ticker-strip { border-bottom:1px solid var(--line); overflow:hidden; background:#0E1114; white-space:nowrap; padding:8px 0; }
+.ticker-track { display:inline-block; font-family:var(--font-mono); font-size:12.5px; color:var(--text-dim); padding-left:100%; animation: scroll-left 38s linear infinite; }
+@keyframes scroll-left { from { transform:translateX(0); } to { transform:translateX(-100%); } }
+.tick-up { color:var(--gain); } .tick-down { color:var(--loss); } .tick-sep { color:var(--line); margin:0 18px; }
+
+main { padding:40px 28px 60px; max-width:1180px; margin:0 auto; }
+.hidden { display:none !important; }
+.empty-state, .error-state { text-align:center; padding:90px 20px; }
+.signature-mark { font-size:32px; color:var(--accent); margin-bottom:18px; }
+.empty-state h1, .error-state h1 { font-family:var(--font-display); font-weight:600; font-size:26px; margin:0 0 10px; }
+.empty-state p, .error-state p { color:var(--text-dim); max-width:480px; margin:0 auto; font-size:14.5px; line-height:1.6; }
+.quick-picks { margin-top:28px; display:flex; gap:10px; justify-content:center; flex-wrap:wrap; }
+.quick-pick { background:var(--bg-panel); border:1px solid var(--line); color:var(--text); font-family:var(--font-mono); font-size:13px; padding:8px 16px; border-radius:2px; cursor:pointer; }
+.quick-pick:hover { border-color:var(--accent); color:var(--accent); }
+
+.dashboard { display:grid; grid-template-columns:1fr 1fr; gap:18px; }
+.panel { background:var(--bg-panel); border:1px solid var(--line); border-radius:3px; padding:20px 22px; }
+.overview-panel, .chart-panel, .prediction-panel { grid-column:span 2; }
+.panel-title { font-family:var(--font-display); font-weight:600; font-size:14px; margin-bottom:14px; display:flex; align-items:baseline; gap:10px; }
+.eyebrow { font-family:var(--font-mono); font-weight:400; font-size:11px; color:var(--text-dim); letter-spacing:0.02em; }
+
+.overview-head { display:flex; justify-content:space-between; align-items:flex-start; flex-wrap:wrap; gap:16px; border-bottom:1px solid var(--line); padding-bottom:18px; margin-bottom:18px; }
+.stock-name { font-family:var(--font-display); font-weight:600; font-size:20px; }
+.stock-symbol { font-family:var(--font-mono); font-size:13px; color:var(--text-dim); margin-top:2px; }
+.price-block { text-align:right; }
+.price { font-family:var(--font-mono); font-size:30px; font-weight:500; }
+.change { font-family:var(--font-mono); font-size:14px; margin-top:4px; }
+.change.up { color:var(--gain); } .change.down { color:var(--loss); }
+.stat-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(130px, 1fr)); gap:16px; }
+.stat { display:flex; flex-direction:column; gap:4px; }
+.stat-label { font-size:11px; color:var(--text-dim); text-transform:uppercase; letter-spacing:0.04em; }
+.stat-value { font-family:var(--font-mono); font-size:14.5px; }
+
+.prediction-body { display:grid; grid-template-columns:1.1fr 1fr; gap:28px; }
+.forecast-main { display:flex; flex-direction:column; gap:14px; }
+.forecast-price-row { display:flex; align-items:baseline; gap:14px; }
+.forecast-price { font-family:var(--font-mono); font-size:32px; font-weight:500; color:var(--accent); }
+.forecast-growth { font-family:var(--font-mono); font-size:15px; }
+.forecast-growth.up { color:var(--gain); } .forecast-growth.down { color:var(--loss); }
+.forecast-trend { font-family:var(--font-display); font-weight:600; font-size:14px; letter-spacing:0.02em; }
+.confidence-row { margin-top:6px; }
+.confidence-label { font-size:12px; color:var(--text-dim); margin-bottom:6px; }
+.confidence-bar-track { height:8px; background:#1B1F25; border-radius:4px; overflow:hidden; border:1px solid var(--line); }
+.confidence-bar-fill { height:100%; background:linear-gradient(90deg, var(--accent), var(--gain)); }
+.confidence-value { font-family:var(--font-mono); font-size:12px; margin-top:6px; color:var(--text-dim); }
+.signal-list { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:10px; }
+.signal-list li { font-size:13.5px; padding-left:16px; position:relative; }
+.signal-list li::before { content:'—'; position:absolute; left:0; color:var(--accent); }
+.model-note { margin-top:10px; font-size:11.5px; color:var(--text-dim); }
+.loading-line { color:var(--text-dim); font-family:var(--font-mono); font-size:13px; }
+
+.foot { border-top:1px solid var(--line); padding:16px 28px; display:flex; justify-content:space-between; flex-wrap:wrap; gap:6px; font-size:11.5px; color:var(--text-dim); font-family:var(--font-mono); }
+
+@media (max-width:760px) {
+  .overview-panel, .chart-panel, .prediction-panel, .dashboard { grid-template-columns:1fr; }
+  .prediction-body { grid-template-columns:1fr; }
+  .price-block { text-align:left; }
+  .overview-head { flex-direction:column; }
+}
+</style>
+</head>
+<body>
+
+<div class="banner">DEMO MODE — this standalone file simulates market data locally (deterministic per ticker). No internet connection, backend, or API keys used or required.</div>
+
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">◆</span><span class="brand-name">STOCKSENSE<span class="brand-accent">.AI</span></span></div>
+  <div class="search-wrap">
+    <input id="symbolInput" type="text" placeholder="Enter any ticker — AAPL, MSFT, TSLA, RELIANCE.NS…" autocomplete="off" />
+    <button id="searchBtn">Analyze</button>
+  </div>
+  <div class="range-pills" id="rangePills">
+    <button data-range="1mo" class="pill">1M</button>
+    <button data-range="6mo" class="pill active">6M</button>
+    <button data-range="1y" class="pill">1Y</button>
+    <button data-range="5y" class="pill">5Y</button>
+  </div>
+</header>
+
+<div class="ticker-strip"><div class="ticker-track" id="tickerTrack">Loading market pulse…</div></div>
+
+<main id="app">
+  <section class="empty-state" id="emptyState">
+    <div class="signature-mark">◆</div>
+    <h1>Type a ticker to begin.</h1>
+    <p>Simulated prices, real technical-indicator math, and an in-browser forecasting model — all computed on your device, nothing sent anywhere.</p>
+    <div class="quick-picks">
+      <button class="quick-pick" data-symbol="AAPL">AAPL</button>
+      <button class="quick-pick" data-symbol="MSFT">MSFT</button>
+      <button class="quick-pick" data-symbol="TSLA">TSLA</button>
+      <button class="quick-pick" data-symbol="NVDA">NVDA</button>
+      <button class="quick-pick" data-symbol="RELIANCE.NS">RELIANCE.NS</button>
+    </div>
+  </section>
+
+  <section class="dashboard hidden" id="dashboard">
+    <div class="panel overview-panel">
+      <div class="overview-head">
+        <div><div class="stock-name" id="stockName">—</div><div class="stock-symbol" id="stockSymbol">—</div></div>
+        <div class="price-block"><div class="price" id="currentPrice">—</div><div class="change" id="priceChange">—</div></div>
+      </div>
+      <div class="stat-grid" id="statGrid"></div>
+    </div>
+
+    <div class="panel chart-panel">
+      <div class="panel-title">Price &amp; Moving Averages <span class="eyebrow">OHLC · SMA20 · SMA50</span></div>
+      <canvas id="priceChart" height="110"></canvas>
+    </div>
+
+    <div class="panel indicator-panel">
+      <div class="panel-title">RSI (14) <span class="eyebrow">Overbought &gt; 70 · Oversold &lt; 30</span></div>
+      <canvas id="rsiChart" height="60"></canvas>
+    </div>
+
+    <div class="panel indicator-panel">
+      <div class="panel-title">MACD <span class="eyebrow">12 · 26 · 9</span></div>
+      <canvas id="macdChart" height="60"></canvas>
+    </div>
+
+    <div class="panel prediction-panel">
+      <div class="panel-title">AI Forecast <span class="eyebrow">In-browser regression · next session close</span></div>
+      <div class="prediction-body" id="predictionBody"><div class="loading-line">Computing forecast…</div></div>
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <span>Standalone demo — all data simulated locally in JavaScript.</span>
+  <span>Educational tool. Not investment advice.</span>
+</footer>
+
+<script>
+const el = (id) => document.getElementById(id);
+let priceChart, rsiChart, macdChart;
+let currentRange = "6mo";
+let currentSymbol = null;
+
+const CHART_COLORS = { text:"#8B9199", line:"#23272E", close:"#E8E6E1", sma20:"#D8A24A", sma50:"#3FB68C", rsi:"#D8A24A", macd:"#3FB68C", signal:"#E2604C" };
+
+function fmtNum(n, decimals = 2) {
+  if (n === null || n === undefined || Number.isNaN(n)) return "—";
+  return Number(n).toLocaleString(undefined, { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+}
+function fmtLargeNum(n) {
+  if (n === null || n === undefined) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1e12) return (n/1e12).toFixed(2)+"T";
+  if (abs >= 1e9) return (n/1e9).toFixed(2)+"B";
+  if (abs >= 1e6) return (n/1e6).toFixed(2)+"M";
+  if (abs >= 1e3) return (n/1e3).toFixed(2)+"K";
+  return n.toString();
+}
+
+/* ---------- Deterministic per-symbol PRNG (mulberry32) ---------- */
+function hashSeed(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) {
+    h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+    h = (h << 13) | (h >>> 19);
+  }
+  return () => {
+    h = Math.imul(h ^ (h >>> 16), 2246822507);
+    h = Math.imul(h ^ (h >>> 13), 3266489909);
+    h ^= h >>> 16;
+    return (h >>> 0) / 4294967296;
+  };
+}
+function mulberry32(seed) {
+  let a = seed;
+  return function() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function gaussian(rand) {
+  const u1 = Math.max(rand(), 1e-9), u2 = rand();
+  return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+}
+
+const RANGE_DAYS = { "1mo": 22, "6mo": 130, "1y": 260, "5y": 1300 };
+const TOTAL_DAYS = 1300;
+
+/* ---------- Simulated market data generator (deterministic per symbol) ----------
+   Generates the FULL history once (TOTAL_DAYS), independent of the selected
+   chart range. The chart range only controls how much of that full series
+   is sliced off for display -- the forecast model always trains on a fixed,
+   sufficiently large window so short display ranges (e.g. "1M") never
+   starve the regression of data. */
+function generateFullHistory(symbol) {
+  const seedFn = hashSeed(symbol.toUpperCase());
+  const seed = Math.floor(seedFn() * 1e9);
+  const rand = mulberry32(seed);
+  const basePrice = 20 + rand() * 480;
+  const drift = (rand() - 0.45) * 0.0006;
+  const vol = 0.012 + rand() * 0.02;
+
+  const closes = [basePrice];
+  for (let i = 1; i < TOTAL_DAYS; i++) {
+    const shock = gaussian(rand) * vol;
+    const next = closes[i - 1] * (1 + drift + shock);
+    closes.push(Math.max(next, 0.5));
+  }
+
+  const today = new Date();
+  let cursor = new Date(today);
+  const stamped = [];
+  let count = 0;
+  while (count < closes.length) {
+    cursor.setDate(cursor.getDate() - 1);
+    const day = cursor.getDay();
+    if (day === 0 || day === 6) continue;
+    stamped.unshift(new Date(cursor));
+    count++;
+  }
+
+  const open = [], high = [], low = [], close = [], volume = [];
+  for (let i = 0; i < closes.length; i++) {
+    const c = closes[i];
+    const o = i === 0 ? c : closes[i - 1] * (1 + gaussian(rand) * vol * 0.3);
+    const h = Math.max(o, c) * (1 + Math.abs(gaussian(rand)) * vol * 0.4);
+    const l = Math.min(o, c) * (1 - Math.abs(gaussian(rand)) * vol * 0.4);
+    open.push(o); high.push(h); low.push(l); close.push(c);
+    volume.push(Math.floor(1_000_000 + rand() * 9_000_000));
+  }
+
+  return { dates: stamped.map(d => d.toISOString().slice(0, 10)), open, high, low, close, volume };
+}
+
+function sliceForDisplay(full, rangeKey) {
+  const days = RANGE_DAYS[rangeKey] || 130;
+  const n = full.close.length;
+  const from = Math.max(0, n - days);
+  return {
+    dates: full.dates.slice(from),
+    open: full.open.slice(from),
+    high: full.high.slice(from),
+    low: full.low.slice(from),
+    close: full.close.slice(from),
+    volume: full.volume.slice(from),
+  };
+}
+
+function generateHistory(symbol, rangeKey) {
+  const full = generateFullHistory(symbol);
+  return sliceForDisplay(full, rangeKey);
+}
+
+function generateOverview(symbol, history) {
+  const rand = mulberry32(Math.floor(hashSeed(symbol.toUpperCase() + "meta")() * 1e9));
+  const last = history.close[history.close.length - 1];
+  const prev = history.close[history.close.length - 2] ?? last;
+  const change = last - prev;
+  const changePct = prev ? (change / prev) * 100 : 0;
+  const names = {
+    AAPL: "Apple Inc.", MSFT: "Microsoft Corporation", TSLA: "Tesla, Inc.",
+    NVDA: "NVIDIA Corporation", GOOGL: "Alphabet Inc.", AMZN: "Amazon.com, Inc.",
+  };
+  const sectors = ["Technology", "Healthcare", "Financials", "Energy", "Consumer Discretionary", "Industrials"];
+  return {
+    symbol: symbol.toUpperCase(),
+    name: names[symbol.toUpperCase()] || (symbol.toUpperCase() + " (simulated)"),
+    current_price: last,
+    open: history.open[history.open.length - 1],
+    high: history.high[history.high.length - 1],
+    low: history.low[history.low.length - 1],
+    change, change_pct: changePct,
+    volume: history.volume[history.volume.length - 1],
+    market_cap: Math.floor((5e9 + rand() * 2e12)),
+    pe_ratio: 8 + rand() * 42,
+    eps: 0.5 + rand() * 15,
+    beta: 0.4 + rand() * 1.8,
+    week52_high: Math.max(...history.close) * (1 + rand() * 0.05),
+    week52_low: Math.min(...history.close) * (1 - rand() * 0.05),
+    sector: sectors[Math.floor(rand() * sectors.length)],
+    industry: "Simulated — demo data",
+  };
+}
+
+/* ---------- Indicators (pure JS ports of the Python versions) ---------- */
+function sma(values, window) {
+  const out = [];
+  for (let i = 0; i < values.length; i++) {
+    const start = Math.max(0, i - window + 1);
+    const slice = values.slice(start, i + 1);
+    out.push(slice.reduce((a,b)=>a+b,0) / slice.length);
+  }
+  return out;
+}
+function ema(values, span) {
+  const k = 2 / (span + 1);
+  const out = [values[0]];
+  for (let i = 1; i < values.length; i++) out.push(values[i]*k + out[i-1]*(1-k));
+  return out;
+}
+function rsi(values, period=14) {
+  const out = [50];
+  let avgGain = 0, avgLoss = 0;
+  for (let i = 1; i < values.length; i++) {
+    const delta = values[i] - values[i-1];
+    const gain = Math.max(delta, 0), loss = Math.max(-delta, 0);
+    if (i <= period) {
+      avgGain = ((avgGain*(i-1)) + gain) / i;
+      avgLoss = ((avgLoss*(i-1)) + loss) / i;
+    } else {
+      avgGain = (avgGain*(period-1) + gain) / period;
+      avgLoss = (avgLoss*(period-1) + loss) / period;
+    }
+    const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+    out.push(avgLoss === 0 ? 100 : 100 - (100/(1+rs)));
+  }
+  return out;
+}
+function macdCalc(values, fast=12, slow=26, signal=9) {
+  const emaFast = ema(values, fast);
+  const emaSlow = ema(values, slow);
+  const macdLine = values.map((_, i) => emaFast[i] - emaSlow[i]);
+  const signalLine = ema(macdLine, signal);
+  return { macd: macdLine, signal: signalLine };
+}
+
+/* ---------- Simple in-browser forecasting model ----------
+   Ridge-regularized linear regression on engineered features
+   (recent returns, momentum, RSI, distance from moving averages).
+   Not scikit-learn, but same spirit: fit on history, predict next close. */
+function forecastNextClose(history) {
+  const close = history.close;
+  const n = close.length;
+  const smaShort = sma(close, 10);
+  const smaLong = sma(close, 30);
+  const rsiVals = rsi(close, 14);
+  const { macd, signal } = macdCalc(close);
+
+  // Build feature matrix X and target y (next-day close) for training window
+  const X = [], y = [];
+  const start = 35;
+  for (let i = start; i < n - 1; i++) {
+    X.push([
+      1,
+      (close[i] - close[i-1]) / close[i-1],          // 1-day return
+      (close[i] - close[i-5]) / close[i-5],           // 5-day momentum
+      (rsiVals[i] - 50) / 50,                          // centered RSI
+      (close[i] - smaShort[i]) / smaShort[i],          // distance from SMA10
+      (close[i] - smaLong[i]) / smaLong[i],            // distance from SMA30
+      (macd[i] - signal[i]) / (Math.abs(close[i]) || 1),
+    ]);
+    y.push((close[i+1] - close[i]) / close[i]); // predict next-day % return
+  }
+
+  const weights = ridgeRegression(X, y, 0.5);
+  const latest = [
+    1,
+    (close[n-1]-close[n-2])/close[n-2],
+    (close[n-1]-close[n-6])/close[n-6],
+    (rsiVals[n-1]-50)/50,
+    (close[n-1]-smaShort[n-1])/smaShort[n-1],
+    (close[n-1]-smaLong[n-1])/smaLong[n-1],
+    (macd[n-1]-signal[n-1])/(Math.abs(close[n-1])||1),
+  ];
+  const predictedReturn = dot(weights, latest);
+  const lastClose = close[n-1];
+  const predictedClose = lastClose * (1 + predictedReturn);
+
+  // In-sample residual stats for a rough confidence + interval
+  let sqErr = 0, absErr = 0, ssTot = 0;
+  const meanY = y.reduce((a,b)=>a+b,0) / y.length;
+  const preds = X.map(row => dot(weights, row));
+  for (let i = 0; i < y.length; i++) {
+    sqErr += (preds[i]-y[i])**2;
+    absErr += Math.abs(preds[i]-y[i]);
+    ssTot += (y[i]-meanY)**2;
+  }
+  const mse = sqErr / y.length;
+  const rmse = Math.sqrt(mse);
+  const mae = absErr / y.length;
+  const r2 = ssTot > 0 ? 1 - (sqErr/ssTot) : 0;
+
+  const expectedGrowthPct = predictedReturn * 100;
+  const trend = expectedGrowthPct > 0.15 ? "Bullish" : (expectedGrowthPct < -0.15 ? "Bearish" : "Neutral");
+  const confidence = Math.max(30, Math.min(92, 58 + r2 * 40));
+  const rmseClose = rmse * lastClose;
+
+  const rsiLatest = rsiVals[n-1];
+  const volAvg = history.volume.slice(-20).reduce((a,b)=>a+b,0) / Math.min(20, history.volume.length);
+  const volLatest = history.volume[n-1];
+  const signals = [];
+  signals.push(trend === "Bullish" ? "Bullish trend" : (trend === "Bearish" ? "Bearish trend" : "Sideways / neutral trend"));
+  signals.push(rsiLatest > 70 ? "RSI overbought" : (rsiLatest < 30 ? "RSI oversold" : "RSI in healthy range"));
+  signals.push(macd[n-1] > signal[n-1] ? "MACD bullish cross" : "MACD bearish cross");
+  signals.push(volLatest > volAvg ? "Volume above average" : "Volume below average");
+
+  return {
+    last_close: lastClose,
+    predicted_next_close: predictedClose,
+    expected_growth_pct: expectedGrowthPct,
+    trend,
+    confidence_score: confidence,
+    prediction_interval: { low: predictedClose - rmseClose, high: predictedClose + rmseClose },
+    model: "In-browser ridge regression",
+    metrics: { rmse: rmse, mae: mae, r2: r2 },
+    signals,
+    rsi: rsiLatest,
+  };
+}
+function dot(a, b) { let s=0; for (let i=0;i<a.length;i++) s += a[i]*b[i]; return s; }
+function ridgeRegression(X, y, lambda) {
+  const m = X[0].length;
+  const XtX = Array.from({length:m}, () => new Array(m).fill(0));
+  const Xty = new Array(m).fill(0);
+  for (let row = 0; row < X.length; row++) {
+    for (let i = 0; i < m; i++) {
+      Xty[i] += X[row][i] * y[row];
+      for (let j = 0; j < m; j++) XtX[i][j] += X[row][i] * X[row][j];
+    }
+  }
+  for (let i = 0; i < m; i++) XtX[i][i] += lambda;
+  return solveLinearSystem(XtX, Xty);
+}
+function solveLinearSystem(A, b) {
+  const n = b.length;
+  const M = A.map((row,i) => [...row, b[i]]);
+  for (let col = 0; col < n; col++) {
+    let pivot = col;
+    for (let r = col+1; r < n; r++) if (Math.abs(M[r][col]) > Math.abs(M[pivot][col])) pivot = r;
+    [M[col], M[pivot]] = [M[pivot], M[col]];
+    const pv = M[col][col] || 1e-9;
+    for (let c = col; c <= n; c++) M[col][c] /= pv;
+    for (let r = 0; r < n; r++) {
+      if (r === col) continue;
+      const factor = M[r][col];
+      for (let c = col; c <= n; c++) M[r][c] -= factor * M[col][c];
+    }
+  }
+  return M.map(row => row[n]);
+}
+
+/* ---------- Rendering ---------- */
+function showDashboard() { el("emptyState").classList.add("hidden"); el("dashboard").classList.remove("hidden"); }
+
+function loadTickerStrip() {
+  const symbols = ["AAPL","MSFT","GOOGL","TSLA","NVDA","AMZN"];
+  const parts = symbols.map(s => {
+    const h = generateHistory(s, "1mo");
+    const o = generateOverview(s, h);
+    const cls = o.change_pct >= 0 ? "tick-up" : "tick-down";
+    const arrow = o.change_pct >= 0 ? "▲" : "▼";
+    return `<span>${o.symbol} <span class="${cls}">${arrow} ${fmtNum(o.change_pct)}%</span></span>`;
+  });
+  el("tickerTrack").innerHTML = parts.join('<span class="tick-sep">·</span>');
+}
+
+function renderOverview(data) {
+  el("stockName").textContent = data.name;
+  el("stockSymbol").textContent = data.symbol + " · simulated";
+  el("currentPrice").textContent = fmtNum(data.current_price);
+  const changeEl = el("priceChange");
+  const up = data.change >= 0;
+  changeEl.textContent = `${up?"+":""}${fmtNum(data.change)} (${up?"+":""}${fmtNum(data.change_pct)}%)`;
+  changeEl.className = "change " + (up ? "up" : "down");
+  const stats = [
+    ["Open", fmtNum(data.open)], ["High", fmtNum(data.high)], ["Low", fmtNum(data.low)],
+    ["Volume", fmtLargeNum(data.volume)], ["Market Cap", fmtLargeNum(data.market_cap)],
+    ["P/E Ratio", fmtNum(data.pe_ratio)], ["EPS", fmtNum(data.eps)], ["Beta", fmtNum(data.beta)],
+    ["52W High", fmtNum(data.week52_high)], ["52W Low", fmtNum(data.week52_low)],
+    ["Sector", data.sector], ["Industry", data.industry],
+  ];
+  el("statGrid").innerHTML = stats.map(([l,v]) => `<div class="stat"><div class="stat-label">${l}</div><div class="stat-value">${v}</div></div>`).join("");
+}
+
+function chartOptions(extra={}) {
+  return {
+    responsive:true,
+    interaction:{ mode:"index", intersect:false },
+    plugins:{
+      legend:{ labels:{ color:CHART_COLORS.text, font:{ family:"IBM Plex Mono", size:11 }, boxWidth:12 } },
+      tooltip:{ titleFont:{ family:"IBM Plex Mono" }, bodyFont:{ family:"IBM Plex Mono" } },
+    },
+    scales:{
+      x:{ ticks:{ color:CHART_COLORS.text, maxTicksLimit:8, font:{ family:"IBM Plex Mono", size:10 } }, grid:{ color:CHART_COLORS.line } },
+      y:{ min:extra.min, max:extra.max, ticks:{ color:CHART_COLORS.text, font:{ family:"IBM Plex Mono", size:10 } }, grid:{ color:CHART_COLORS.line } },
+    },
+  };
+}
+
+function renderPriceChart(history) {
+  const ctx = el("priceChart").getContext("2d");
+  const s20 = sma(history.close, 20), s50 = sma(history.close, 50);
+  if (priceChart) priceChart.destroy();
+  priceChart = new Chart(ctx, { type:"line", data:{ labels:history.dates, datasets:[
+    { label:"Close", data:history.close, borderColor:CHART_COLORS.close, borderWidth:1.6, pointRadius:0, tension:0.15 },
+    { label:"SMA 20", data:s20, borderColor:CHART_COLORS.sma20, borderWidth:1.4, pointRadius:0, tension:0.15 },
+    { label:"SMA 50", data:s50, borderColor:CHART_COLORS.sma50, borderWidth:1.4, pointRadius:0, tension:0.15 },
+  ]}, options: chartOptions() });
+}
+function renderRsiChart(dates, rsiVals) {
+  const ctx = el("rsiChart").getContext("2d");
+  if (rsiChart) rsiChart.destroy();
+  rsiChart = new Chart(ctx, { type:"line", data:{ labels:dates, datasets:[
+    { label:"RSI 14", data:rsiVals, borderColor:CHART_COLORS.rsi, borderWidth:1.6, pointRadius:0, tension:0.15 },
+  ]}, options: chartOptions({min:0,max:100}) });
+}
+function renderMacdChart(dates, macd, signal) {
+  const ctx = el("macdChart").getContext("2d");
+  if (macdChart) macdChart.destroy();
+  macdChart = new Chart(ctx, { type:"line", data:{ labels:dates, datasets:[
+    { label:"MACD", data:macd, borderColor:CHART_COLORS.macd, borderWidth:1.6, pointRadius:0, tension:0.15 },
+    { label:"Signal", data:signal, borderColor:CHART_COLORS.signal, borderWidth:1.6, pointRadius:0, tension:0.15 },
+  ]}, options: chartOptions() });
+}
+function renderPrediction(p) {
+  const up = p.expected_growth_pct >= 0;
+  el("predictionBody").innerHTML = `
+    <div class="forecast-main">
+      <div>
+        <div class="forecast-price-row">
+          <div class="forecast-price">${fmtNum(p.predicted_next_close)}</div>
+          <div class="forecast-growth ${up?"up":"down"}">${up?"+":""}${fmtNum(p.expected_growth_pct)}%</div>
+        </div>
+        <div class="forecast-trend" style="color:${up?"var(--gain)":"var(--loss)"}">${p.trend.toUpperCase()}</div>
+      </div>
+      <div class="confidence-row">
+        <div class="confidence-label">Confidence score</div>
+        <div class="confidence-bar-track"><div class="confidence-bar-fill" style="width:${p.confidence_score}%"></div></div>
+        <div class="confidence-value">${fmtNum(p.confidence_score,1)}% · interval ${fmtNum(p.prediction_interval.low)} – ${fmtNum(p.prediction_interval.high)}</div>
+      </div>
+      <div class="model-note">${p.model} · R² ${fmtNum(p.metrics.r2,3)} · RMSE ${fmtNum(p.metrics.rmse*100,3)}% . Simulated data — for demo purposes only.</div>
+    </div>
+    <div class="forecast-signals">
+      <div class="stat-label" style="margin-bottom:10px;">Why this forecast</div>
+      <ul class="signal-list">${p.signals.map(s=>`<li>${s}</li>`).join("")}</ul>
+    </div>`;
+}
+
+function loadSymbol(symbol) {
+  currentSymbol = symbol;
+  el("predictionBody").innerHTML = '<div class="loading-line">Computing forecast…</div>';
+  const full = generateFullHistory(symbol);
+  const history = sliceForDisplay(full, currentRange);
+  const overview = generateOverview(symbol, history);
+  showDashboard();
+  renderOverview(overview);
+  renderPriceChart(history);
+  const rsiVals = rsi(history.close, 14);
+  const { macd, signal } = macdCalc(history.close);
+  renderRsiChart(history.dates, rsiVals);
+  renderMacdChart(history.dates, macd, signal);
+  // Forecast always trains on a fixed, sufficiently large window of full
+  // history (not the possibly-short display slice) so it works for any range.
+  const trainingHistory = sliceForDisplay(full, "1y");
+  const prediction = forecastNextClose(trainingHistory);
+  renderPrediction(prediction);
+}
+
+el("searchBtn").addEventListener("click", () => {
+  const val = el("symbolInput").value.trim().toUpperCase();
+  if (val) loadSymbol(val);
+});
+el("symbolInput").addEventListener("keydown", (e) => { if (e.key === "Enter") el("searchBtn").click(); });
+document.querySelectorAll(".quick-pick").forEach(btn => {
+  btn.addEventListener("click", () => { el("symbolInput").value = btn.dataset.symbol; loadSymbol(btn.dataset.symbol); });
+});
+document.querySelectorAll(".pill").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".pill").forEach(p => p.classList.remove("active"));
+    btn.classList.add("active");
+    currentRange = btn.dataset.range;
+    if (currentSymbol) loadSymbol(currentSymbol);
+  });
+});
+
+loadTickerStrip();
+</script>
+</body>
+</html>
